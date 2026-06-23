@@ -1,12 +1,12 @@
 # DocuShield: Smart Regulatory & Compliance Auditor (RAG)
 
-DocuShield is an advanced, self-contained compliance auditing application built with Node.js. It leverages Retrieval-Augmented Generation (RAG) to compare corporate agreements or policies against complex regulatory standards (e.g., GDPR, HIPAA) and automatically flags violations with exact citations and suggested compliant rewrites.
+DocuShield is an advanced compliance auditing application built with Node.js and the **LangChain.js** framework. It leverages Retrieval-Augmented Generation (RAG) to compare corporate agreements or policies against complex regulatory standards (e.g., GDPR, HIPAA) and automatically flags violations with exact citations and suggested compliant rewrites.
 
 ---
 
 ## Key Features
 
-1. **Pinecone Cloud Vector Database:** Integrates **Pinecone** via `@pinecone-database/pinecone` for vector storage and querying. It automates index provisioning (Serverless AWS) and handles bulk vector ingestion.
+1. **LangChain & Pinecone Orchestration:** Integrates the **LangChain.js** framework (`@langchain/core`, `@langchain/pinecone`, and `@langchain/google-genai`) to manage RAG orchestration, vector store indexes, and Chat models seamlessly.
 2. **Parent-Document Retrieval:** Matches small 2-sentence child chunks during vector search for maximum semantic precision, but retrieves and sends the full parent policy/article to the LLM. This is achieved by storing parent article text inside the child vector's metadata block on Pinecone, providing the generator with complete context while avoiding database fragmentation.
 3. **Automated Compliance Auditing:** Parses contracts into clauses, audits them against the regulatory database using Gemini, and outputs:
    - A **Verdict** (`COMPLIANT` / `NON-COMPLIANT` / `INSUFFICIENT_INFORMATION`)
