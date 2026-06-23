@@ -14,3 +14,7 @@ data/audit_report.md
 # System Files
 .DS_Store
 Thumbs.db
+
+# Resume Files
+resume.tex
+*.tex
