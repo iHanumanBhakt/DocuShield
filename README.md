@@ -6,14 +6,13 @@ DocuShield is an advanced, self-contained compliance auditing application built 
 
 ## Key Features
 
-1. **Custom Vector Database:** Written from scratch in JavaScript. It implements pure mathematical **Cosine Similarity** for semantic search, eliminating the need for complex external database setups (like Docker, PostgreSQL/pgvector, or cloud vector stores).
-2. **Parent-Document Retrieval:** Matches small 2-sentence child chunks during vector search for maximum semantic precision, but retrieves and sends the full parent policy/article to the LLM. This provides the generator with the complete legal context, reducing hallucinations and legal misinterpretations.
+1. **Pinecone Cloud Vector Database:** Integrates **Pinecone** via `@pinecone-database/pinecone` for vector storage and querying. It automates index provisioning (Serverless AWS) and handles bulk vector ingestion.
+2. **Parent-Document Retrieval:** Matches small 2-sentence child chunks during vector search for maximum semantic precision, but retrieves and sends the full parent policy/article to the LLM. This is achieved by storing parent article text inside the child vector's metadata block on Pinecone, providing the generator with complete context while avoiding database fragmentation.
 3. **Automated Compliance Auditing:** Parses contracts into clauses, audits them against the regulatory database using Gemini, and outputs:
    - A **Verdict** (`COMPLIANT` / `NON-COMPLIANT` / `INSUFFICIENT_INFORMATION`)
    - A **Detailed Legal Analysis**
    - Explicit **Violations** (citing specific articles)
    - A **Suggested Clause Rewrite**
-4. **Data Persistence:** Serializes the vector database into a local JSON index (`data/vector_db.json`) for instant startup.
 
 ---
 
@@ -25,7 +24,7 @@ graph TD
     subgraph Ingestion [Ingestion Pipeline]
         A[Regulatory Text] --> B[Section Parser]
         B --> C[Child Chunking: 2-Sentence Windows]
-        C -->|Embeddings API| D[(Custom Vector DB: JSON)]
+        C -->|Embeddings API| D[(Pinecone Cloud Vector DB)]
     end
 
     %% Auditing Pipeline
@@ -33,8 +32,7 @@ graph TD
         E[Corporate Contract] --> F[Clause Extractor]
         F -->|Extract clauses| G[Audit Queries]
         G -->|Vector Query| D
-        D -->|Retrieve Child Match| H[Parent Document Linker]
-        H -->|Resolve to Full Article| I[Retrieved Regulations Context]
+        D -->|Retrieve Chunks + Parent Metadata| I[Retrieved Regulations Context]
     end
 
     %% RAG Verification
@@ -58,9 +56,8 @@ e:/DocuShield/
 ├── data/
 │   ├── regulations/          # Regulatory texts database
 │   │   └── gdpr_sample.txt   # Sample GDPR policy articles (Arts 5, 6, 17)
-│   ├── contracts/            # Target contracts to audit
-│   │   └── vendor_agreement_sample.txt # Sample agreement with violations
-│   └── vector_db.json        # Persisted vector database (generated)
+│   └── contracts/            # Target contracts to audit
+│       └── vendor_agreement_sample.txt # Sample agreement with violations
 └── src/
     ├── config.js             # Initializing Gemini client & constants
     ├── vectorDb.js           # Custom Vector DB & Cosine Similarity logic
@@ -88,9 +85,11 @@ Create a `.env` file in the root of the project:
 ```bash
 cp .env.example .env
 ```
-Open `.env` and fill in your Gemini API key (obtainable from [Google AI Studio](https://aistudio.google.com/)):
+Open `.env` and fill in your Gemini and Pinecone API credentials:
 ```env
 GEMINI_API_KEY=your_gemini_api_key_here
+PINECONE_API_KEY=your_pinecone_api_key_here
+PINECONE_INDEX=docushield
 ```
 
 ---
@@ -98,11 +97,11 @@ GEMINI_API_KEY=your_gemini_api_key_here
 ## Usage Guide
 
 ### Step 1: Ingest Regulations
-Build the semantic vector database by indexing the regulatory texts:
+Create the Pinecone index and upload the embedded regulatory texts:
 ```bash
 npm run ingest
 ```
-This reads the text files in `data/regulations`, segments them, requests embeddings using Gemini's `text-embedding-004` model, and saves the vector space to `data/vector_db.json`.
+This script reads the text files in `data/regulations`, segments them, fetches embeddings using Gemini's `text-embedding-004` model, checks/provisions the Pinecone serverless index, and bulk-upserts the vectors with metadata.
 
 ### Step 2: Audit a Contract
 Launch the compliance auditor:
@@ -110,15 +109,15 @@ Launch the compliance auditor:
 npm start
 ```
 1. Select the target contract (e.g., `vendor_agreement_sample.txt`) from the menu.
-2. The auditor will extract each clause, query the vector database, construct the RAG prompt, and present the compliance results in the terminal.
+2. The auditor will extract each clause, generate query embeddings, search the Pinecone cloud index, resolve parent metadata, construct the RAG prompt, and output compliance assessments.
 3. A copy of the full Markdown audit report will be saved to `data/audit_report.md`.
 
 ---
 
-## Math Behind the Custom Vector Search
+## Vector Similarity Metrics (Pinecone Cosine Similarity)
 
-To calculate similarity between embeddings without an external DB, the engine implements the **Cosine Similarity** formula in pure JavaScript:
+Pinecone performs vector database search using the **Cosine Similarity** metric:
 
 $$\text{similarity} = \cos(\theta) = \frac{\mathbf{A} \cdot \mathbf{B}}{\|\mathbf{A}\| \|\mathbf{B}\|} = \frac{\sum_{i=1}^{n} A_i B_i}{\sqrt{\sum_{i=1}^{n} A_i^2} \sqrt{\sum_{i=1}^{n} B_i^2}}$$
 
-This calculates the cosine of the angle between the query vector $\mathbf{A}$ and the indexed document vector $\mathbf{B}$. A score closer to `1.0` indicates high semantic similarity.
+This metric measures the cosine of the angle between the query embedding $\mathbf{A}$ and the document embedding $\mathbf{B}$. The output ranges from `-1.0` to `1.0`, where `1.0` indicates perfect semantic alignment.

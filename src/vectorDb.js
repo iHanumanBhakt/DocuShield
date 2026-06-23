@@ -1,100 +1,66 @@
-import fs from "fs/promises";
-import path from "path";
-
-export function cosineSimilarity(vecA, vecB) {
-  if (vecA.length !== vecB.length) {
-    throw new Error("Vectors must be of the same length.");
-  }
-  let dotProduct = 0.0;
-  let normA = 0.0;
-  let normB = 0.0;
-  for (let i = 0; i < vecA.length; i++) {
-    dotProduct += vecA[i] * vecB[i];
-    normA += vecA[i] * vecA[i];
-    normB += vecB[i] * vecB[i];
-  }
-  if (normA === 0 || normB === 0) return 0;
-  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-}
+import { pinecone, PINECONE_INDEX_NAME } from "./config.js";
 
 export class VectorDb {
   constructor() {
-    this.parentDocuments = {}; // Map of parentId -> { id, docName, header, content }
-    this.childChunks = [];      // Array of { id, parentId, text, embedding, metadata }
+    this.index = pinecone.index(PINECONE_INDEX_NAME);
   }
 
-  addParentDocument(id, docName, header, content) {
-    this.parentDocuments[id] = { id, docName, header, content };
-  }
-
-  addChildChunk(id, parentId, text, embedding, metadata = {}) {
-    this.childChunks.push({ id, parentId, text, embedding, metadata });
-  }
-
-  async save(dbFilePath) {
+  async load() {
     try {
-      await fs.mkdir(path.dirname(dbFilePath), { recursive: true });
-      const data = {
-        parentDocuments: this.parentDocuments,
-        childChunks: this.childChunks,
-      };
-      await fs.writeFile(dbFilePath, JSON.stringify(data, null, 2), "utf8");
-      console.log(`💾 Saved Vector Database to ${dbFilePath} (${this.childChunks.length} chunks indexed)`);
-    } catch (err) {
-      console.error(`❌ Error saving Vector Database: ${err.message}`);
-    }
-  }
-
-  async load(dbFilePath) {
-    try {
-      const dataText = await fs.readFile(dbFilePath, "utf8");
-      const data = JSON.parse(dataText);
-      this.parentDocuments = data.parentDocuments || {};
-      this.childChunks = data.childChunks || [];
-      console.log(`📂 Loaded Vector Database from ${dbFilePath} (${this.childChunks.length} chunks loaded)`);
+      const indexList = await pinecone.listIndexes();
+      const exists = indexList.indexes.some(i => i.name === PINECONE_INDEX_NAME);
+      if (!exists) {
+        console.error(`❌ Pinecone index "${PINECONE_INDEX_NAME}" does not exist in your account.`);
+        return false;
+      }
       return true;
     } catch (err) {
-      // If file doesn't exist, we start with an empty DB, which is normal before first ingestion
+      console.error(`❌ Failed to connect to Pinecone: ${err.message}`);
       return false;
     }
   }
 
-  search(queryEmbedding, limit = 3) {
-    if (this.childChunks.length === 0) {
-      return [];
-    }
+  async search(queryEmbedding, limit = 3) {
+    try {
+      const queryResponse = await this.index.query({
+        vector: queryEmbedding,
+        topK: limit * 2, // Query slightly more to allow deduplication of parents
+        includeMetadata: true,
+      });
 
-    // 1. Calculate similarity for all child chunks
-    const matches = this.childChunks.map((chunk) => {
-      const score = cosineSimilarity(queryEmbedding, chunk.embedding);
-      return { chunk, score };
-    });
+      const retrievedParents = [];
+      const seenParents = new Set();
 
-    // 2. Sort by similarity score descending
-    matches.sort((a, b) => b.score - a.score);
+      if (!queryResponse.matches) return [];
 
-    // 3. Retrieve unique parent documents from top child matches
-    const retrievedParents = [];
-    const seenParents = new Set();
+      for (const match of queryResponse.matches) {
+        const metadata = match.metadata;
+        if (!metadata) continue;
 
-    for (const match of matches) {
-      const parentId = match.chunk.parentId;
-      if (!seenParents.has(parentId)) {
-        seenParents.add(parentId);
-        const parentDoc = this.parentDocuments[parentId];
-        if (parentDoc) {
+        const header = metadata.sectionHeader || "Unknown Section";
+        if (!seenParents.has(header)) {
+          seenParents.add(header);
           retrievedParents.push({
-            parentDoc,
-            score: match.score, // keep the best similarity score of its child
-            matchedSnippet: match.chunk.text,
+            parentDoc: {
+              id: match.id,
+              docName: metadata.docName,
+              header: metadata.sectionHeader,
+              content: metadata.parentContent,
+            },
+            score: match.score,
+            matchedSnippet: metadata.text,
           });
         }
-      }
-      if (retrievedParents.length >= limit) {
-        break;
-      }
-    }
 
-    return retrievedParents;
+        if (retrievedParents.length >= limit) {
+          break;
+        }
+      }
+
+      return retrievedParents;
+    } catch (err) {
+      console.error(`❌ Error querying Pinecone: ${err.message}`);
+      return [];
+    }
   }
 }

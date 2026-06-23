@@ -37,7 +37,7 @@ export async function auditContract(contractFilePath) {
       const queryEmbedding = embedResponse.embedding.values;
 
       // 4. Query Vector Database (Parent-Document Retrieval)
-      const retrieved = db.search(queryEmbedding, 2);
+      const retrieved = await db.search(queryEmbedding, 2);
 
       if (retrieved.length === 0) {
         console.log(`      ⚠️ No matching regulations found for ${title}. Skipping.`);
