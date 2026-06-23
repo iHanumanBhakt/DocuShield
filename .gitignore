@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+
+# Environment Config
+.env
+
+# Serialized Database (generated on run)
+data/vector_db.json
+
+# Generated Audit Reports
+data/audit_report.md
+
+# System Files
+.DS_Store
+Thumbs.db

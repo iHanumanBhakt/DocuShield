@@ -1,0 +1,12 @@
+VENDOR SERVICE AGREEMENT (MOCK)
+
+This Vendor Service Agreement ("Agreement") is entered into by and between Acme Corp ("Client") and DataHarvesters Inc ("Vendor").
+
+Clause 1: Purpose & Data Minimization
+The Vendor agrees to process Client user data for the sole purpose of rendering analytics services. However, to facilitate long-term machine learning training and product optimizations, the Vendor will retain all raw client customer data indefinitely, regardless of contract termination or account closure.
+
+Clause 2: Consent & Marketing
+To subsidize operational costs, the Vendor is authorized to process, segment, and share Client user personal data (including email and browsing history) with third-party marketing networks. The Vendor shall not be required to verify or obtain explicit consent from the individual users prior to such sharing.
+
+Clause 3: Right to Erasure
+The Client agrees that all user data loaded into the Vendor's data storage platform is immutable. The Vendor is under no obligation to delete, scrub, or modify individual user records upon request by the Client or the individual data subjects, due to the high operational cost of index rebuilding.

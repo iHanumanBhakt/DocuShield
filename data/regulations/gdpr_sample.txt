@@ -1,0 +1,16 @@
+# Article 5 - Principles relating to processing of personal data
+Personal data shall be processed lawfully, fairly and in a transparent manner. It must be collected for specified, explicit and legitimate purposes and not further processed in a manner that is incompatible with those purposes. It must be adequate, relevant and limited to what is necessary in relation to the purposes for which they are processed ('data minimisation'). Personal data shall be kept in a form which permits identification of data subjects for no longer than is necessary for the purposes for which the personal data are processed.
+
+# Article 6 - Lawfulness of processing
+Processing shall be lawful only if and to the extent that at least one of the following applies:
+(a) the data subject has given consent to the processing of his or her personal data for one or more specific purposes;
+(b) processing is necessary for the performance of a contract to which the data subject is party;
+(c) processing is necessary for compliance with a legal obligation to which the controller is subject;
+(d) processing is necessary in order to protect the vital interests of the data subject or of another natural person.
+
+# Article 17 - Right to erasure ('right to be forgotten')
+The data subject shall have the right to obtain from the controller the erasure of personal data concerning him or her without undue delay and the controller shall have the obligation to erase personal data without undue delay where one of the following grounds applies:
+(a) the personal data are no longer necessary in relation to the purposes for which they were collected or otherwise processed;
+(b) the data subject withdraws consent on which the processing is based according to point (a) of Article 6(1), and where there is no other legal ground for the processing;
+(c) the data subject objects to the processing and there are no overriding legitimate grounds for the processing;
+(d) the personal data have been unlawfully processed.
