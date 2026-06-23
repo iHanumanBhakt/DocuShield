@@ -1,7 +1,9 @@
 import fs from "fs/promises";
 import path from "path";
 import crypto from "crypto";
-import { ai, MODELS, pinecone, PINECONE_INDEX_NAME } from "./config.js";
+import { Document } from "@langchain/core/documents";
+import { PineconeStore } from "@langchain/pinecone";
+import { embeddings, pinecone, PINECONE_INDEX_NAME } from "./config.js";
 
 async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -10,7 +12,7 @@ async function sleep(ms) {
 async function main() {
   const regulationsDir = "./data/regulations";
 
-  console.log("🚀 Starting Ingestion Pipeline to Pinecone...");
+  console.log("🚀 Starting Ingestion Pipeline to Pinecone via LangChain...");
 
   try {
     // 1. Ensure Pinecone index exists
@@ -26,7 +28,7 @@ async function main() {
         spec: {
           serverless: {
             cloud: "aws",
-            region: "us-east-1", // standard free tier region
+            region: "us-east-1",
           },
         },
       });
@@ -46,7 +48,7 @@ async function main() {
       console.log(`✅ Index "${PINECONE_INDEX_NAME}" already exists.`);
     }
 
-    const index = pinecone.index(PINECONE_INDEX_NAME);
+    const pineconeIndex = pinecone.Index(PINECONE_INDEX_NAME);
 
     const files = await fs.readdir(regulationsDir);
     const textFiles = files.filter(f => f.endsWith(".txt") || f.endsWith(".md"));
@@ -56,7 +58,7 @@ async function main() {
       return;
     }
 
-    const vectorsToUpsert = [];
+    const documentsToUpsert = [];
 
     for (const file of textFiles) {
       const filePath = path.join(regulationsDir, file);
@@ -91,51 +93,37 @@ async function main() {
           childChunks.push(chunkText);
         }
 
-        console.log(`   └─ Section "${header}": Generating embeddings for ${childChunks.length} chunks...`);
+        console.log(`   └─ Section "${header}": Creating ${childChunks.length} documents...`);
 
         for (const chunkText of childChunks) {
-          try {
-            // Get vector embedding from Gemini
-            const response = await ai.models.embedContent({
-              model: MODELS.embedding,
-              contents: chunkText,
-            });
-            const embedding = response.embedding.values;
-
-            const childId = crypto.randomUUID();
-
-            vectorsToUpsert.push({
-              id: childId,
-              values: embedding,
+          documentsToUpsert.push(
+            new Document({
+              pageContent: chunkText,
               metadata: {
                 parentId,
-                text: chunkText,
                 docName: file,
                 sectionHeader: header,
                 parentContent: sectionContent, // Holds parent context for RAG
               },
-            });
-          } catch (embedError) {
-            console.error(`      ❌ Failed to embed chunk: "${chunkText.substring(0, 30)}..." - Error: ${embedError.message}`);
-          }
+            })
+          );
         }
       }
     }
 
-    // 2. Upsert in batches of 50 to avoid payload size limit issues
-    if (vectorsToUpsert.length > 0) {
-      const batchSize = 50;
-      console.log(`\n📤 Upserting ${vectorsToUpsert.length} vectors to Pinecone in batches of ${batchSize}...`);
+    // 2. Ingest documents using LangChain PineconeStore (automatically embeddings & batching)
+    if (documentsToUpsert.length > 0) {
+      console.log(`\n📤 Ingesting ${documentsToUpsert.length} documents to Pinecone via LangChain...`);
+      
+      // LangChain handles embedding generation and batch uploads automatically under the hood
+      await PineconeStore.fromDocuments(documentsToUpsert, embeddings, {
+        pineconeIndex,
+        textKey: "text",
+      });
 
-      for (let i = 0; i < vectorsToUpsert.length; i += batchSize) {
-        const batch = vectorsToUpsert.slice(i, i + batchSize);
-        await index.upsert(batch);
-        console.log(`   Uploaded batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(vectorsToUpsert.length / batchSize)}`);
-      }
-
-      console.log("✅ Ingestion successfully completed and synced to Pinecone!");
+      console.log("✅ Ingestion successfully completed and synced to Pinecone via LangChain!");
     } else {
-      console.log("⚠️ No vectors to index.");
+      console.log("⚠️ No documents to index.");
     }
 
   } catch (err) {

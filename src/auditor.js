@@ -1,16 +1,15 @@
 import fs from "fs/promises";
 import path from "path";
-import { ai, MODELS } from "./config.js";
+import { model, embeddings } from "./config.js";
 import { VectorDb } from "./vectorDb.js";
 
 export async function auditContract(contractFilePath) {
-  const dbPath = "./data/vector_db.json";
   const db = new VectorDb();
 
-  // 1. Load Vector Database
-  const loaded = await db.load(dbPath);
+  // 1. Load Vector Database (resolves Pinecone index setup)
+  const loaded = await db.load();
   if (!loaded) {
-    throw new Error("Vector database file not found. Please run 'npm run ingest' first to index regulations.");
+    throw new Error("Vector database index not found. Please run 'npm run ingest' first to index regulations.");
   }
 
   console.log(`\n🔍 Auditing contract: ${path.basename(contractFilePath)}`);
@@ -29,14 +28,10 @@ export async function auditContract(contractFilePath) {
     console.log(`   ⏳ Auditing ${title}...`);
 
     try {
-      // 3. Embed the contract clause to perform semantic search
-      const embedResponse = await ai.models.embedContent({
-        model: MODELS.embedding,
-        contents: clause,
-      });
-      const queryEmbedding = embedResponse.embedding.values;
+      // 3. Embed the contract clause using LangChain Embeddings
+      const queryEmbedding = await embeddings.embedQuery(clause);
 
-      // 4. Query Vector Database (Parent-Document Retrieval)
+      // 4. Query Vector Database (Parent-Document Retrieval via LangChain)
       const retrieved = await db.search(queryEmbedding, 2);
 
       if (retrieved.length === 0) {
@@ -86,20 +81,17 @@ Format your output in clean Markdown with the following headers:
 **Suggested Rewrite:** [Rewritten clause]
 `;
 
-      // 6. Generate Audit Report via Gemini
-      const response = await ai.models.generateContent({
-        model: MODELS.generation,
-        contents: auditPrompt,
-      });
+      // 6. Generate Audit Report via LangChain Model
+      const response = await model.invoke(auditPrompt);
 
       auditReport.push({
         clauseTitle: title,
         originalClause: clause,
         retrievedContexts: retrieved.map(r => ({
           header: r.parentDoc.header,
-          score: r.score.toFixed(3),
+          score: typeof r.score === 'number' ? r.score.toFixed(3) : r.score,
         })),
-        auditOutput: response.text.trim(),
+        auditOutput: response.content.trim(),
       });
 
     } catch (err) {

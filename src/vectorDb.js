@@ -1,8 +1,10 @@
-import { pinecone, PINECONE_INDEX_NAME } from "./config.js";
+import { PineconeStore } from "@langchain/pinecone";
+import { pinecone, PINECONE_INDEX_NAME, embeddings } from "./config.js";
 
 export class VectorDb {
   constructor() {
-    this.index = pinecone.index(PINECONE_INDEX_NAME);
+    this.pineconeIndex = pinecone.Index(PINECONE_INDEX_NAME);
+    this.store = null;
   }
 
   async load() {
@@ -13,6 +15,12 @@ export class VectorDb {
         console.error(`❌ Pinecone index "${PINECONE_INDEX_NAME}" does not exist in your account.`);
         return false;
       }
+
+      this.store = await PineconeStore.fromExistingIndex(embeddings, {
+        pineconeIndex: this.pineconeIndex,
+        textKey: "text",
+      });
+
       return true;
     } catch (err) {
       console.error(`❌ Failed to connect to Pinecone: ${err.message}`);
@@ -22,19 +30,19 @@ export class VectorDb {
 
   async search(queryEmbedding, limit = 3) {
     try {
-      const queryResponse = await this.index.query({
-        vector: queryEmbedding,
-        topK: limit * 2, // Query slightly more to allow deduplication of parents
-        includeMetadata: true,
-      });
+      if (!this.store) {
+        const initialized = await this.load();
+        if (!initialized) return [];
+      }
+
+      // Perform semantic search using the precomputed query embedding
+      const matches = await this.store.similaritySearchVectorWithScore(queryEmbedding, limit * 2);
 
       const retrievedParents = [];
       const seenParents = new Set();
 
-      if (!queryResponse.matches) return [];
-
-      for (const match of queryResponse.matches) {
-        const metadata = match.metadata;
+      for (const [doc, score] of matches) {
+        const metadata = doc.metadata;
         if (!metadata) continue;
 
         const header = metadata.sectionHeader || "Unknown Section";
@@ -42,13 +50,13 @@ export class VectorDb {
           seenParents.add(header);
           retrievedParents.push({
             parentDoc: {
-              id: match.id,
+              id: doc.id,
               docName: metadata.docName,
               header: metadata.sectionHeader,
               content: metadata.parentContent,
             },
-            score: match.score,
-            matchedSnippet: metadata.text,
+            score: score,
+            matchedSnippet: doc.pageContent,
           });
         }
 
@@ -59,7 +67,7 @@ export class VectorDb {
 
       return retrievedParents;
     } catch (err) {
-      console.error(`❌ Error querying Pinecone: ${err.message}`);
+      console.error(`❌ Error querying Pinecone via LangChain: ${err.message}`);
       return [];
     }
   }
